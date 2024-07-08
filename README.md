@@ -12,6 +12,12 @@ The Spotify Insights Generator is an open-source project that provides tools to 
 - Generates various insights like listening time distribution and partial play ratios
 - Displays data in interactive HTML files
 
+## Before you start
+There are two different programs here
+### inisghts.py
+This is for the web api data, you will have to set up developer app and go through OAuth, your data is limited from what they let you pull.
+### insights_pro.py
+This deals with the data that YOU MUST REQUEST from spotify. Navigate their website and request your streaming history. They will give a zip file. Transfer streaming history files into a data folder local to this repo
 ## Prerequisites
 
 - Python 3.6 or higher
