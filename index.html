@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Spotify Insights Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <style>
+        .audio-features {
+            transition: all 0.3s ease-in-out;
+            transform: translateY(20px);
+            opacity: 0;
+            pointer-events: none;
+        }
+        .audio-features.show {
+            transform: translateY(0);
+            opacity: 1;
+            pointer-events: auto;
+        }
+    </style>
+</head>
+<body class="bg-gray-100">
+    <div class="container mx-auto p-4">
+        <h1 class="text-4xl font-bold mb-6 text-center">Your Spotify Insights</h1>
+        
+        <!-- Time Range Selector -->
+        <div class="mb-6 text-center">
+            <select id="timeRange" class="p-2 border rounded-full bg-white shadow-md">
+                <option value="short_term">Last 4 Weeks</option>
+                <option value="medium_term">Last 6 Months</option>
+                <option value="long_term">All Time</option>
+            </select>
+        </div>
+
+        <!-- Insights Section -->
+        <div id="insights" class="mb-8 bg-white p-6 rounded-lg shadow-lg">
+            <h2 class="text-2xl font-semibold mb-4">Listening Insights</h2>
+            <div id="insightsContent" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4"></div>
+        </div>
+
+        <!-- Top Tracks Grid -->
+        <div id="trackGrid" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-6"></div>
+    </div>
+
+    <script>
+        let currentTimeRange = 'short_term';
+        let allData;
+
+        fetch('spotify_comprehensive_data.json')
+            .then(response => response.json())
+            .then(data => {
+                allData = data;
+                const timeRangeSelect = document.getElementById('timeRange');
+                timeRangeSelect.addEventListener('change', () => {
+                    currentTimeRange = timeRangeSelect.value;
+                    updateDisplay();
+                });
+                updateDisplay();
+            });
+
+        function updateDisplay() {
+            displayInsights(allData[currentTimeRange]);
+            displayTopTracks(allData[currentTimeRange].top_tracks);
+        }
+
+        function displayTopTracks(tracks) {
+            const trackGrid = document.getElementById('trackGrid');
+            trackGrid.innerHTML = '';
+            tracks.forEach((track, index) => {
+                const trackElement = document.createElement('div');
+                trackElement.className = 'bg-white rounded-lg shadow-md overflow-hidden transition-transform duration-300 hover:scale-105';
+                trackElement.innerHTML = `
+                    <div class="relative">
+                        <img src="${track.image}" alt="${track.name}" class="w-full h-48 object-cover">
+                        <span class="absolute top-2 left-2 bg-black bg-opacity-70 text-white rounded-full w-8 h-8 flex items-center justify-center text-sm font-bold">${index + 1}</span>
+                    </div>
+                    <div class="p-4">
+                        <h3 class="font-semibold truncate">${track.name}</h3>
+                        <p class="text-gray-600 truncate">${track.artist}</p>
+                        <button class="mt-2 bg-green-500 hover:bg-green-600 text-white px-3 py-1 rounded-full text-sm transition-colors duration-300">Audio Features</button>
+                    </div>
+                    <div class="audio-features hidden bg-white p-4 rounded-b-lg shadow-lg">
+                        <canvas width="200" height="200"></canvas>
+                    </div>
+                `;
+                const button = trackElement.querySelector('button');
+                const audioFeaturesDiv = trackElement.querySelector('.audio-features');
+                button.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    closeAllAudioFeatures();
+                    audioFeaturesDiv.classList.remove('hidden');
+                    setTimeout(() => audioFeaturesDiv.classList.add('show'), 50);
+                    displayAudioFeatures(track, audioFeaturesDiv.querySelector('canvas'));
+                });
+                trackGrid.appendChild(trackElement);
+            });
+        }
+
+        function closeAllAudioFeatures() {
+            document.querySelectorAll('.audio-features.show').forEach(div => {
+                div.classList.remove('show');
+                setTimeout(() => div.classList.add('hidden'), 300);
+            });
+        }
+
+        function displayAudioFeatures(track, canvas) {
+            const ctx = canvas.getContext('2d');
+            new Chart(ctx, {
+                type: 'radar',
+                data: {
+                    labels: ['Danceability', 'Energy', 'Valence', 'Acousticness', 'Instrumentalness'],
+                    datasets: [{
+                        label: track.name,
+                        data: [
+                            track.audio_features.danceability,
+                            track.audio_features.energy,
+                            track.audio_features.valence,
+                            track.audio_features.acousticness,
+                            track.audio_features.instrumentalness
+                        ],
+                        backgroundColor: 'rgba(29, 185, 84, 0.2)',
+                        borderColor: 'rgb(29, 185, 84)',
+                        pointBackgroundColor: 'rgb(29, 185, 84)',
+                        pointBorderColor: '#fff',
+                        pointHoverBackgroundColor: '#fff',
+                        pointHoverBorderColor: 'rgb(29, 185, 84)'
+                    }]
+                },
+                options: {
+                    elements: { line: { borderWidth: 3 } },
+                    scales: { r: { angleLines: { display: false }, suggestedMin: 0, suggestedMax: 1 } },
+                    plugins: { legend: { display: false } }
+                }
+            });
+        }
+
+        function displayInsights(data) {
+            const insightsContent = document.getElementById('insightsContent');
+            const insights = generateInsights(data);
+            insightsContent.innerHTML = `
+                <div class="bg-blue-100 p-4 rounded-lg">
+                    <h3 class="font-bold text-blue-800">Popularity</h3>
+                    <p class="text-blue-600">Avg: ${insights.avgPopularity.toFixed(0)}/100</p>
+                    <p class="text-sm text-blue-700 mt-2">Top: ${insights.mostPopularTrack.name}</p>
+                </div>
+                <div class="bg-green-100 p-4 rounded-lg">
+                    <h3 class="font-bold text-green-800">Danceability</h3>
+                    <p class="text-green-600">Top: ${insights.mostDanceableTrack.name}</p>
+                    <p class="text-sm text-green-700 mt-2">Score: ${insights.mostDanceableTrack.audio_features.danceability.toFixed(2)}</p>
+                </div>
+                <div class="bg-red-100 p-4 rounded-lg">
+                    <h3 class="font-bold text-red-800">Energy</h3>
+                    <p class="text-red-600">Top: ${insights.mostEnergeticTrack.name}</p>
+                    <p class="text-sm text-red-700 mt-2">Score: ${insights.mostEnergeticTrack.audio_features.energy.toFixed(2)}</p>
+                </div>
+                <div class="bg-purple-100 p-4 rounded-lg">
+                    <h3 class="font-bold text-purple-800">Acousticness</h3>
+                    <p class="text-purple-600">Top: ${insights.mostAcousticTrack.name}</p>
+                    <p class="text-sm text-purple-700 mt-2">Score: ${insights.mostAcousticTrack.audio_features.acousticness.toFixed(2)}</p>
+                </div>
+                <div class="bg-yellow-100 p-4 rounded-lg">
+                    <h3 class="font-bold text-yellow-800">Tempo</h3>
+                    <p class="text-yellow-600">Avg: ${insights.avgTempo.toFixed(0)} BPM</p>
+                    <p class="text-sm text-yellow-700 mt-2">Range: ${insights.tempoRange.min.toFixed(0)} - ${insights.tempoRange.max.toFixed(0)} BPM</p>
+                </div>
+                <div class="bg-indigo-100 p-4 rounded-lg">
+                    <h3 class="font-bold text-indigo-800">Key</h3>
+                    <p class="text-indigo-600">Dominant: ${getKeyName(insights.dominantKey)}</p>
+                </div>
+                <div class="bg-pink-100 p-4 rounded-lg col-span-2">
+                    <h3 class="font-bold text-pink-800">Top Genres</h3>
+                    <p class="text-pink-600">${insights.topGenres.join(', ')}</p>
+                </div>
+            `;
+        }
+
+        function generateInsights(data) {
+            const tracks = data.top_tracks;
+            const insights = {
+                avgPopularity: tracks.reduce((sum, track) => sum + track.popularity, 0) / tracks.length,
+                mostPopularTrack: tracks.reduce((max, track) => track.popularity > max.popularity ? track : max),
+                mostDanceableTrack: tracks.reduce((max, track) => track.audio_features.danceability > max.audio_features.danceability ? track : max),
+                mostEnergeticTrack: tracks.reduce((max, track) => track.audio_features.energy > max.audio_features.energy ? track : max),
+                mostAcousticTrack: tracks.reduce((max, track) => track.audio_features.acousticness > max.audio_features.acousticness ? track : max),
+                avgTempo: tracks.reduce((sum, track) => sum + track.audio_features.tempo, 0) / tracks.length,
+                tempoRange: tracks.reduce((range, track) => ({
+                    min: Math.min(range.min, track.audio_features.tempo),
+                    max: Math.max(range.max, track.audio_features.tempo)
+                }), { min: Infinity, max: -Infinity }),
+                dominantKey: getMostCommonKey(tracks),
+                topGenres: getTopGenres(tracks)
+            };
+            return insights;
+        }
+
+        function getMostCommonKey(tracks) {
+            const keyCounts = tracks.reduce((counts, track) => {
+                counts[track.audio_features.key] = (counts[track.audio_features.key] || 0) + 1;
+                return counts;
+            }, {});
+            return Object.keys(keyCounts).reduce((a, b) => keyCounts[a] > keyCounts[b] ? a : b);
+        }
+
+        function getTopGenres(tracks) {
+            const genreCounts = tracks.flatMap(track => track.genres).reduce((counts, genre) => {
+                counts[genre] = (counts[genre] || 0) + 1;
+                return counts;
+            }, {});
+            return Object.entries(genreCounts)
+                .sort((a, b) => b[1] - a[1])
+                .slice(0, 5)
+                .map(([genre]) => genre);
+        }
+
+        function getKeyName(key) {
+            const keyNames = ['C', 'C♯/D♭', 'D', 'D♯/E♭', 'E', 'F', 'F♯/G♭', 'G', 'G♯/A♭', 'A', 'A♯/B♭', 'B'];
+            return keyNames[key] || 'Unknown';
+        }
+
+        document.addEventListener('click', (e) => {
+            if (!e.target.closest('.audio-features') && !e.target.closest('button')) {
+                closeAllAudioFeatures();
+            }
+        });
+    </script>
+</body>
+</html>
