@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Spotify Listening Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 0; padding: 20px; background-color: #f0f0f0; }
+        .chart-container { width: 80%; margin: 20px auto; background-color: white; padding: 20px; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
+        h1 { text-align: center; color: #1DB954; }
+        .controls { margin-bottom: 10px; }
+        select, button { margin-right: 10px; }
+    </style>
+</head>
+<body>
+    <h1>My Spotify Listening Dashboard</h1>
+    
+    <div class="chart-container">
+        <div class="controls">
+            <label for="topArtistsCount">Top Artists: </label>
+            <select id="topArtistsCount">
+                <option value="10">10</option>
+                <option value="20">20</option>
+                <option value="50">50</option>
+                <option value="100">100</option>
+            </select>
+        </div>
+        <canvas id="topArtistsChart"></canvas>
+    </div>
+
+    <div class="chart-container">
+        <div class="controls">
+            <label for="topTracksCount">Top Tracks: </label>
+            <select id="topTracksCount">
+                <option value="10">10</option>
+                <option value="20">20</option>
+                <option value="50">50</option>
+                <option value="100">100</option>
+            </select>
+        </div>
+        <canvas id="topTracksChart"></canvas>
+    </div>
+
+    <div class="chart-container">
+        <div class="controls">
+            <label for="listeningPatternType">Listening Pattern: </label>
+            <select id="listeningPatternType">
+                <option value="hourly">Hourly</option>
+                <option value="daily">Daily</option>
+                <option value="weekly">Weekly</option>
+                <option value="monthly">Monthly</option>
+            </select>
+        </div>
+        <canvas id="listeningPatternChart"></canvas>
+    </div>
+
+    <div class="chart-container">
+        <canvas id="durationVsPlaycountChart"></canvas>
+    </div>
+
+    <div class="chart-container">
+        <canvas id="partialPlayRatioChart"></canvas>
+    </div>
+
+    <script>
+        let globalData;
+        let charts = {};
+    
+        fetch('output/spotify_insights.json')
+            .then(response => response.json())
+            .then(data => {
+                console.log('Data loaded:', data);
+                globalData = data;
+                initializeCharts();
+                setupEventListeners();
+            })
+            .catch(error => console.error('Error loading data:', error));
+    
+        function setupEventListeners() {
+            document.getElementById('topArtistsCount').addEventListener('change', () => updateChart('topArtists'));
+            document.getElementById('topTracksCount').addEventListener('change', () => updateChart('topTracks'));
+            document.getElementById('listeningPatternType').addEventListener('change', () => updateChart('listeningPattern'));
+        }
+    
+        function initializeCharts() {
+            createTopArtistsChart();
+            createTopTracksChart();
+            createListeningPatternChart();
+            createDurationVsPlaycountChart();
+            createPartialPlayRatioChart();
+        }
+    
+        function updateChart(chartType) {
+            if (charts[chartType]) {
+                charts[chartType].destroy();
+            }
+            switch(chartType) {
+                case 'topArtists':
+                    createTopArtistsChart();
+                    break;
+                case 'topTracks':
+                    createTopTracksChart();
+                    break;
+                case 'listeningPattern':
+                    createListeningPatternChart();
+                    break;
+            }
+        }
+    
+        function createTopArtistsChart() {
+            const count = parseInt(document.getElementById('topArtistsCount').value);
+            const data = Object.entries(globalData.totalTimePerArtist)
+                .sort((a, b) => b[1] - a[1])
+                .slice(0, count);
+    
+            const ctx = document.getElementById('topArtistsChart').getContext('2d');
+            charts.topArtists = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: data.map(d => d[0]),
+                    datasets: [{
+                        label: 'Minutes Played',
+                        data: data.map(d => d[1]),
+                        backgroundColor: 'rgba(29, 185, 84, 0.6)'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        title: {
+                            display: true,
+                            text: `Top ${count} Artists by Listening Time`
+                        }
+                    }
+                }
+            });
+        }
+    
+        function createTopTracksChart() {
+            const count = parseInt(document.getElementById('topTracksCount').value);
+            const data = Object.entries(globalData.topTracks)
+                .sort((a, b) => b[1] - a[1])
+                .slice(0, count);
+    
+            const ctx = document.getElementById('topTracksChart').getContext('2d');
+            charts.topTracks = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: data.map(d => d[0]),
+                    datasets: [{
+                        label: 'Minutes Played',
+                        data: data.map(d => d[1]),
+                        backgroundColor: 'rgba(30, 215, 96, 0.6)'
+                    }]
+                },
+                options: {
+                    indexAxis: 'y',
+                    responsive: true,
+                    plugins: {
+                        title: {
+                            display: true,
+                            text: `Top ${count} Tracks by Listening Time`
+                        }
+                    }
+                }
+            });
+        }
+    
+        function createListeningPatternChart() {
+            const type = document.getElementById('listeningPatternType').value;
+            let data;
+            let title;
+    
+            switch(type) {
+                case 'hourly':
+                    data = globalData.totalTimePerHour;
+                    title = 'Hourly Listening Pattern';
+                    break;
+                case 'daily':
+                    data = globalData.dailyListening;
+                    title = 'Daily Listening Pattern';
+                    break;
+                case 'weekly':
+                    data = globalData.weeklyListening;
+                    title = 'Weekly Listening Pattern';
+                    break;
+                case 'monthly':
+                    data = aggregateToMonthly(globalData.weeklyListening);
+                    title = 'Monthly Listening Pattern';
+                    break;
+            }
+    
+            const ctx = document.getElementById('listeningPatternChart').getContext('2d');
+            charts.listeningPattern = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: Object.keys(data),
+                    datasets: [{
+                        label: 'Minutes Played',
+                        data: Object.values(data),
+                        borderColor: 'rgba(29, 185, 84, 1)',
+                        fill: false
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        title: {
+                            display: true,
+                            text: title
+                        }
+                    }
+                }
+            });
+        }
+    
+        function aggregateToMonthly(weeklyData) {
+            const monthlyData = {};
+            Object.entries(weeklyData).forEach(([date, value]) => {
+                const month = date.substring(0, 7); // Extract YYYY-MM
+                monthlyData[month] = (monthlyData[month] || 0) + value;
+            });
+            return monthlyData;
+        }
+    
+        function createDurationVsPlaycountChart() {
+            const ctx = document.getElementById('durationVsPlaycountChart').getContext('2d');
+            const chartData = Object.entries(globalData.durationVsPlaycount).map(([track, values]) => ({
+                x: values.avgDuration,
+                y: values.playCount
+            }));
+            charts.durationVsPlaycount = new Chart(ctx, {
+                type: 'scatter',
+                data: {
+                    datasets: [{
+                        label: 'Tracks',
+                        data: chartData,
+                        backgroundColor: 'rgba(29, 185, 84, 0.6)'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        title: {
+                            display: true,
+                            text: 'Song Duration vs Play Count'
+                        }
+                    },
+                    scales: {
+                        x: {
+                            title: {
+                                display: true,
+                                text: 'Average Duration (seconds)'
+                            }
+                        },
+                        y: {
+                            title: {
+                                display: true,
+                                text: 'Play Count'
+                            }
+                        }
+                    }
+                }
+            });
+        }
+    
+        function createPartialPlayRatioChart() {
+            const ctx = document.getElementById('partialPlayRatioChart').getContext('2d');
+            charts.partialPlayRatio = new Chart(ctx, {
+                type: 'pie',
+                data: {
+                    labels: ['Complete Plays', 'Partial Plays'],
+                    datasets: [{
+                        data: [globalData.partialPlayRatio['true'], globalData.partialPlayRatio['false']],
+                        backgroundColor: ['rgba(29, 185, 84, 0.6)', 'rgba(30, 215, 96, 0.6)']
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        title: {
+                            display: true,
+                            text: 'Complete vs Partial Plays'
+                        }
+                    }
+                }
+            });
+        }
+    </script>
+</body>
+</html>
